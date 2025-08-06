@@ -1,0 +1,45 @@
+# 開発環境用のオーバーライド設定
+# 使用方法: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    environment:
+      - ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # ソースコード全体をマウント（ホットリロード）
+      - ./app:/app/app:cached
+      - ./tests:/app/tests:cached
+      # YOLOモデルキャッシュを永続化
+      - yolo-models:/root/.cache/ultralytics
+    stdin_open: true
+    tty: true
+
+  # テスト実行用コンテナ
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pytest tests/ -v --cov=app
+    environment:
+      - ENV=test
+      - FIRESTORE_EMULATOR_HOST=firestore:8081
+    volumes:
+      - ./app:/app/app:cached
+      - ./tests:/app/tests:cached
+    networks:
+      - furniture-net
+    depends_on:
+      - firestore
+    profiles:
+      - test
+
+volumes:
+  yolo-models:

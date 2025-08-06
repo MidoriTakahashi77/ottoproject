@@ -1,0 +1,28 @@
+# FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0.post1
+python-multipart==0.0.6
+
+# YOLOv8
+ultralytics==8.0.231
+# PyTorch CPU版（Cloud Run用）
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.1
+torchvision==0.16.1
+
+# 画像処理
+Pillow==10.1.0
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+
+# Google Cloud
+google-cloud-firestore==2.13.1
+
+# ユーティリティ
+pydantic==2.5.2
+python-dotenv==1.0.0
+httpx==0.25.2
+
+# 開発用（本番では不要）
+# pytest==7.4.3
+# pytest-asyncio==0.21.1

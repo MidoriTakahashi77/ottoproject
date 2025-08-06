@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ML Models
+*.pt
+*.pth
+*.onnx
+models/
+
+# Logs
+*.log
+logs/
+
+# GCP
+.gcloud/
+*.json
+!requirements.txt
+
+# Docker
+.dockerignore
+
+# Cache
+.cache/
+*.cache
+
+
+.claude
+.tmp
+.mcp.json

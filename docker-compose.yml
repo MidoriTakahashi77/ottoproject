@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      # Firestore エミュレータ接続（開発時）
+      - FIRESTORE_EMULATOR_HOST=firestore:8081
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/serviceaccount.json
+    volumes:
+      # ホットリロード用（開発時）
+      - ./app:/app/app:cached
+      # 認証情報（必要な場合）
+      # - ./credentials:/app/credentials:ro
+    networks:
+      - furniture-net
+    depends_on:
+      - firestore
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
+    command: >
+      bash -c "
+        gcloud beta emulators firestore start --host-port=0.0.0.0:8081
+      "
+    ports:
+      - "8081:8081"
+      - "4400:4400"  # Firestore UI
+    environment:
+      - FIRESTORE_PROJECT_ID=furniture-detection-local
+    networks:
+      - furniture-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 開発用：Swagger UI専用
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "8082:8080"
+    environment:
+      - SWAGGER_JSON_URL=http://api:8080/openapi.json
+      - BASE_URL=/swagger
+    networks:
+      - furniture-net
+    depends_on:
+      - api
+
+networks:
+  furniture-net:
+    driver: bridge
+
+volumes:
+  firestore-data:
