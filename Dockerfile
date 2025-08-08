@@ -24,6 +24,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ビルドステージ
 FROM base as builder
 
+# wgetをインストール（モデルダウンロード用）
+RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+
 # pip更新
 RUN pip install --upgrade pip
 
@@ -31,8 +34,11 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# YOLOv8モデルのダウンロード（ビルド時にキャッシュ）
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# 作業ディレクトリ作成
+WORKDIR /app
+
+# YOLOv8モデルのダウンロード（wgetで直接ダウンロード）
+RUN wget -q https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt -O /app/yolov8n.pt
 
 # 本番ステージ
 FROM base
@@ -41,11 +47,17 @@ FROM base
 COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# YOLOモデルをコピー
-COPY --from=builder /root/.cache/ultralytics /root/.cache/ultralytics
+# YOLOモデルとキャッシュをコピー
+# モデルファイルは /app/yolov8n.pt に保存される
+RUN mkdir -p /root/.cache
+COPY --from=builder /app/yolov8n.pt* /app/
+COPY --from=builder /root/.cache /root/.cache
 
 # アプリケーションコードをコピー
 COPY ./app /app/app
+
+# PYTHONPATHを設定
+ENV PYTHONPATH=/app:$PYTHONPATH
 
 # 非rootユーザーの作成（セキュリティ向上）
 RUN useradd -m -u 1001 appuser && \
@@ -63,4 +75,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8080
 
 # アプリケーション起動
+# Cloud RunのPORT環境変数を使用（デフォルト8080）
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

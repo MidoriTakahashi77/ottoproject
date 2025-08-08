@@ -34,6 +34,7 @@ wheels/
 # Environment
 .env
 .env.local
+.env.production
 
 # Testing
 .coverage
@@ -62,6 +63,8 @@ logs/
 .cache/
 *.cache
 
+# Deployment docs (contains sensitive info)
+DEPLOYMENT_GUIDE.md
 
 .claude
 .tmp

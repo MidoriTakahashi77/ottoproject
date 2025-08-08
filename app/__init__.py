@@ -1,6 +1,6 @@
 """
-家具認識API
-画像から家具を検出し、種類と位置を返すAPIサービス
+Furniture Detection API
+API service to detect furniture types and positions from images
 """
 
 __version__ = "0.1.0"

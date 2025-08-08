@@ -1,56 +1,60 @@
 """
-家具検出APIエンドポイント
+Furniture detection API endpoint
 """
 import time
 import logging
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Request, Depends
 from fastapi.responses import JSONResponse
 from PIL import Image
 import io
 
 from app.models.schemas import DetectionResponse, ErrorResponse, ImageInfo, DetectionSummary, Detection
 from app.services.detector import FurnitureDetector
+from app.middleware.auth import get_api_key
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 許可される画像形式
+# Allowed image formats
 ALLOWED_FORMATS = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 @router.post("/detect", response_model=DetectionResponse, responses={
     400: {"model": ErrorResponse, "description": "Bad Request"},
+    403: {"model": ErrorResponse, "description": "Forbidden - Invalid API Key"},
     413: {"model": ErrorResponse, "description": "File too large"},
     500: {"model": ErrorResponse, "description": "Internal Server Error"}
 })
 async def detect_furniture(
     request: Request,
-    image: UploadFile = File(..., description="検出対象の画像"),
-    confidence_threshold: float = Query(0.5, ge=0.0, le=1.0, description="信頼度閾値"),
-    enable_segmentation: bool = Query(False, description="セグメンテーション有効化（未実装）")
+    image: UploadFile = File(..., description="Image to detect"),
+    confidence_threshold: float = Query(0.5, ge=0.0, le=1.0, description="Confidence threshold"),
+    enable_segmentation: bool = Query(False, description="Enable segmentation (not implemented)"),
+    api_key: str = Depends(get_api_key)
 ):
     """
-    画像から家具を検出
+    Detect furniture from image
     
-    - **image**: JPEG, PNG, WebP形式の画像ファイル（最大10MB）
-    - **confidence_threshold**: 検出の信頼度閾値（0.0-1.0）
-    - **enable_segmentation**: セグメンテーションを有効化（現在未実装）
+    - **image**: JPEG, PNG, WebP image file（max 10MB）
+    - **confidence_threshold**: Detection confidence threshold(0.0-1.0)
+    - **enable_segmentation**: Enable segmentation (currently not implemented)
     
-    家具として検出されるカテゴリ：
-    椅子、ソファ、ベッド、テーブル、テレビ、冷蔵庫など
+    Categories detected as furniture: 
+    Chair, sofa, bed, table, TV, refrigerator, etc.
     """
     start_time = time.time()
     
-    # ファイル形式チェック
+    # File format check
     if image.content_type not in ALLOWED_FORMATS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported image format. Allowed: {', '.join(ALLOWED_FORMATS)}"
         )
     
-    # ファイルサイズチェック
+    # File size check
     contents = await image.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -59,29 +63,29 @@ async def detect_furniture(
         )
     
     try:
-        # 画像を開く
+        # Open image
         img = Image.open(io.BytesIO(contents))
         
-        # RGB変換（透過画像対応）
+        # RGB conversion（Handle transparent images）
         if img.mode != 'RGB':
             img = img.convert('RGB')
         
-        # 画像情報取得
+        # Get image info
         image_info = ImageInfo(
             width=img.width,
             height=img.height,
             format=image.content_type.split('/')[-1]
         )
         
-        # detectorを取得
+        # Get detector
         detector = request.app.state.detector()
         if detector is None:
             raise HTTPException(status_code=500, detail="Model not loaded")
         
-        # 検出実行
+        # Execute detection
         detections = detector.detect(img, confidence_threshold)
         
-        # Detection型に変換
+        # Convert to Detection type
         formatted_detections = [
             Detection(
                 detection_id=d["detection_id"],
@@ -93,7 +97,7 @@ async def detect_furniture(
             for d in detections
         ]
         
-        # サマリー生成
+        # Generate summary
         summary_data = detector.get_summary(detections)
         summary = DetectionSummary(
             total_items=summary_data["total_items"],
@@ -101,10 +105,10 @@ async def detect_furniture(
             detection_quality=summary_data["detection_quality"]
         )
         
-        # 処理時間計算
+        # Calculate processing time
         processing_time_ms = int((time.time() - start_time) * 1000)
         
-        # レスポンス作成
+        # Create response
         response = DetectionResponse(
             status="success",
             processing_time_ms=processing_time_ms,
