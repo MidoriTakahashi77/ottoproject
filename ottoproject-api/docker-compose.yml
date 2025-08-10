@@ -1,0 +1,157 @@
+services:
+  # PostgreSQLデータベース
+  postgres:
+    image: postgres:15-alpine
+    container_name: otto-postgres
+    environment:
+      POSTGRES_DB: ottodb
+      POSTGRES_USER: ottouser
+      POSTGRES_PASSWORD: ottopass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ottouser -d ottodb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - otto-network
+
+  # Redisキャッシュ
+  redis:
+    image: redis:7-alpine
+    container_name: otto-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - otto-network
+
+  # MinIO (S3互換ストレージ)
+  minio:
+    image: minio/minio:latest
+    container_name: otto-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - otto-network
+
+  # Vision API
+  vision-api:
+    build:
+      context: ./services/vision-api
+      dockerfile: Dockerfile
+    container_name: otto-vision-api
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://ottouser:ottopass@postgres:5432/ottodb
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./services/vision-api:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - otto-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Furniture API
+  furniture-api:
+    build:
+      context: ./services/furniture-api
+      dockerfile: Dockerfile
+    container_name: otto-furniture-api
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=postgresql://ottouser:ottopass@postgres:5432/ottodb
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./services/furniture-api:/app
+      - ./packages:/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - otto-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Asset API (Hono)
+  asset-api:
+    build:
+      context: ./services/asset-api
+      dockerfile: Dockerfile
+    container_name: otto-asset-api
+    ports:
+      - "8003:8000"
+    environment:
+      - DATABASE_URL=postgresql://ottouser:ottopass@postgres:5432/ottodb
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NODE_ENV=development
+    volumes:
+      - ./services/asset-api:/app
+      - ./packages:/packages
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - otto-network
+    command: bun run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  otto-network:
+    driver: bridge

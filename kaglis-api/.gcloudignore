@@ -1,0 +1,94 @@
+# .gcloudignore
+# This file specifies files that are *not* uploaded to Google Cloud Platform
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives (which insert the entries of the given .gitignore-style
+# file at that point).
+
+.gcloudignore
+.git
+.gitignore
+
+# Python cache
+# __pycache__/
+# *.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# Testing
+tests/
+pytest_cache/
+.coverage
+htmlcov/
+.pytest_cache/
+*.cover
+
+# Documentation
+*.md
+docs/
+.tmp/
+
+# Docker
+docker-compose*.yml
+Dockerfile.dev
+Makefile
+
+# Development files
+test_*.py
+sample_images/
+*.log
+
+# Node modules (if any)
+node_modules/
+
+# Environment files (local only)
+.env
+.env.local
+.env.development
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# MacOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Model files (will be downloaded during build)
+*.pt
+*.pth
+*.onnx
+# models/  # app/modelsディレクトリは必要なので除外しない
+
+# Cache
+.cache/
+*.cache
+
+# Firebase/Firestore local
+firestore-debug.log
+firebase-debug.log
+
+.mcp.json

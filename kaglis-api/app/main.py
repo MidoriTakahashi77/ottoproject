@@ -1,5 +1,5 @@
 """
-FastAPI メインアプリケーション
+FastAPI main application
 """
 import os
 from fastapi import FastAPI
@@ -33,8 +33,8 @@ async def lifespan(app: FastAPI):
 
 # FastAPIアプリケーション初期化
 app = FastAPI(
-    title="家具認識API",
-    description="画像から家具を検出するAPIサービス",
+    title="Furniture Detection API",
+    description="API service to detect furniture from images",
     version="0.1.0",
     lifespan=lifespan
 )
@@ -53,7 +53,7 @@ app.include_router(detection.router, prefix="/api", tags=["detection"])
 
 @app.get("/")
 async def root():
-    """ヘルスチェックエンドポイント"""
+    """Health check endpoint"""
     return {
         "status": "healthy",
         "service": "furniture-detection-api",
@@ -62,7 +62,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """詳細ヘルスチェック"""
+    """Detailed health check"""
     global detector
     return {
         "status": "healthy",

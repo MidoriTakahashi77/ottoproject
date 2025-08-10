@@ -1,5 +1,5 @@
 """
-YOLOv8を使用した家具検出サービス
+Furniture detection service using YOLOv8
 """
 import os
 import logging
@@ -12,15 +12,15 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 class FurnitureDetector:
-    """家具検出クラス"""
+    """Furniture detection class"""
     
-    # YOLOv8のCOCOクラスから家具関連を抽出
+    # Extract furniture-related classes from YOLOv8 COCO classes
     FURNITURE_CLASSES = {
         'chair': '椅子',
         'couch': 'ソファ',
         'bed': 'ベッド',
         'dining table': 'ダイニングテーブル',
-        'toilet': 'トイレ',  # 家具として扱うか要検討
+        'toilet': 'トイレ',  # Consider as furniture
         'tv': 'テレビ',
         'laptop': 'ノートパソコン',
         'mouse': 'マウス',
@@ -62,35 +62,35 @@ class FurnitureDetector:
     
     def detect(self, image: Image.Image, confidence_threshold: float = 0.5) -> List[Dict[str, Any]]:
         """
-        画像から家具を検出
+        Detect furniture from image
         
         Args:
             image: PIL Image
-            confidence_threshold: 信頼度閾値
+            confidence_threshold: Confidence threshold
             
         Returns:
-            検出結果のリスト
+            List of detection results
         """
         try:
-            # NumPy配列に変換
+            # Convert to NumPy array
             img_array = np.array(image)
             
-            # YOLOv8で推論
+            # YOLOv8 inference
             results = self.model(img_array, conf=confidence_threshold)
             
-            # 結果の処理
+            # Process results
             detections = []
             for r in results:
                 if r.boxes is not None:
                     boxes = r.boxes
                     for i, box in enumerate(boxes):
-                        # クラス名を取得
+                        # Get class name
                         class_id = int(box.cls)
                         class_name = self.model.names[class_id]
                         
-                        # 家具カテゴリのみフィルタリング
+                        # Filter only furniture categories
                         if class_name.lower() in self.FURNITURE_CLASSES:
-                            # バウンディングボックスの座標
+                            # Bounding box coordinates
                             x1, y1, x2, y2 = box.xyxy[0].tolist()
                             
                             detection = {
@@ -120,13 +120,13 @@ class FurnitureDetector:
     
     def get_summary(self, detections: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        検出結果のサマリーを生成
+        Generate detection result summary
         
         Args:
-            detections: 検出結果リスト
+            detections: Detection results list
             
         Returns:
-            サマリー情報
+            Summary information
         """
         total_items = len(detections)
         items_by_category = {}
@@ -135,7 +135,7 @@ class FurnitureDetector:
             label = detection['label']
             items_by_category[label] = items_by_category.get(label, 0) + 1
         
-        # 検出品質の判定
+        # Determine detection quality
         if total_items == 0:
             quality = "none"
         elif total_items < 3:

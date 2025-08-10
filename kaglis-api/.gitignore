@@ -66,6 +66,6 @@ logs/
 # Deployment docs (contains sensitive info)
 DEPLOYMENT_GUIDE.md
 
-.claude/
+.claude
 .tmp
 .mcp.json
