@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LocalStorage Check</title>
+</head>
+<body>
+    <h1>LocalStorage Contents</h1>
+    <pre id="output"></pre>
+    <script>
+        const output = document.getElementById('output');
+        const storageData = {};
+        
+        // LocalStorage内のすべてのキーを取得
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const value = localStorage.getItem(key);
+            
+            // Supabase関連のキーのみ表示
+            if (key.includes('supabase') || key.includes('auth')) {
+                try {
+                    // JSONとしてパース可能か試す
+                    storageData[key] = JSON.parse(value);
+                } catch {
+                    storageData[key] = value;
+                }
+            }
+        }
+        
+        output.textContent = JSON.stringify(storageData, null, 2);
+    </script>
+</body>
+</html>
