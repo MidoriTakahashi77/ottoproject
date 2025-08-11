@@ -11,7 +11,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./ottoproject-api/deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ottouser -d ottodb"]
       interval: 10s
@@ -37,11 +37,10 @@ services:
     networks:
       - otto-network
 
-
   # Vision API
   vision-api:
     build:
-      context: ./services/vision-api
+      context: ./ottoproject-api/services/vision-api
       dockerfile: Dockerfile
     container_name: otto-vision-api
     ports:
@@ -54,8 +53,8 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./services/vision-api:/app
-      - ./packages:/packages
+      - ./ottoproject-api/services/vision-api:/app
+      - ./ottoproject-api/packages:/packages
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,7 +67,7 @@ services:
   # Furniture API
   furniture-api:
     build:
-      context: ./services/furniture-api
+      context: ./ottoproject-api/services/furniture-api
       dockerfile: Dockerfile
     container_name: otto-furniture-api
     ports:
@@ -81,8 +80,8 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./services/furniture-api:/app
-      - ./packages:/packages
+      - ./ottoproject-api/services/furniture-api:/app
+      - ./ottoproject-api/packages:/packages
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,7 +94,7 @@ services:
   # Asset API (Hono)
   asset-api:
     build:
-      context: ./services/asset-api
+      context: ./ottoproject-api/services/asset-api
       dockerfile: Dockerfile
     container_name: otto-asset-api
     ports:
@@ -103,12 +102,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://ottouser:ottopass@postgres:5432/ottodb
       - REDIS_URL=redis://redis:6379
+      - STORAGE_PROVIDER=supabase
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - NODE_ENV=development
     volumes:
-      - ./services/asset-api:/app
-      - ./packages:/packages
+      - ./ottoproject-api/services/asset-api:/app
+      - ./ottoproject-api/packages:/packages
       - /app/node_modules
     depends_on:
       postgres:
@@ -118,6 +118,26 @@ services:
     networks:
       - otto-network
     command: bun run dev
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./ottoproject-frontend
+      dockerfile: Dockerfile.dev
+    container_name: otto-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - NODE_ENV=development
+    volumes:
+      - ./ottoproject-frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - otto-network
 
 volumes:
   postgres_data:
