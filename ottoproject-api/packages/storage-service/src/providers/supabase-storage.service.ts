@@ -389,9 +389,28 @@ export class SupabaseStorageService implements IStorageService {
   }
 
   private mapError(error: any): StorageError {
+    // エラーが存在しない場合
+    if (!error) {
+      return { 
+        message: 'Unknown error', 
+        code: 'UNKNOWN_ERROR',
+        statusCode: 500
+      };
+    }
+    
+    // 文字列エラーの場合
+    if (typeof error === 'string') {
+      return { 
+        message: error, 
+        code: 'ERROR',
+        statusCode: 500
+      };
+    }
+    
+    // オブジェクトエラーの場合（Supabaseエラーまたは通常のError）
     return {
-      message: error.message || 'Unknown error occurred',
-      code: error.code || error.error || 'UNKNOWN_ERROR',
+      message: error.message || error.error || 'Unknown error occurred',
+      code: error.code || error.error_code || 'UNKNOWN_ERROR',
       statusCode: error.statusCode || error.status || 500
     };
   }
