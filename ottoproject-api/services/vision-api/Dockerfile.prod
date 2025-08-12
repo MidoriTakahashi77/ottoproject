@@ -1,0 +1,83 @@
+# 本番用Dockerfile - Vision API
+# マルチステージビルドで軽量化（ML対応）
+
+# ビルドステージ
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# システム依存関係のインストール（ML関連ライブラリ含む）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pythonパッケージのインストール
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# YOLOv8モデルの事前ダウンロード（ビルド時間短縮）
+ENV HOME=/root
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" && \
+    ls -la /root/.cache/ || true
+
+# 実行ステージ
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# ランタイム依存関係のインストール
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libgl1-mesa-glx \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 非rootユーザーを先に作成
+RUN useradd -m -u 1001 appuser
+
+# ビルドステージからPythonパッケージをコピー（appuserのホームディレクトリへ）
+COPY --from=builder /root/.local /home/appuser/.local
+# YOLOモデルは存在する場合のみコピー（初回起動時にダウンロードも可能）
+RUN mkdir -p /home/appuser/.cache
+
+# アプリケーションコードをコピー
+COPY --chown=appuser:appuser . .
+
+# 権限設定
+RUN chown -R appuser:appuser /app /home/appuser/.local /home/appuser/.cache
+
+# ユーザー切り替え
+USER appuser
+
+# PATHを更新
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# Cloud Runのデフォルトポート
+EXPOSE 8080
+
+# 環境変数
+ENV HOST=0.0.0.0
+ENV PYTHONUNBUFFERED=1
+ENV OMP_NUM_THREADS=4
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:8080/health').raise_for_status()" || exit 1
+
+# アプリケーション起動（Cloud RunがPORT環境変数を自動設定）
+CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"
