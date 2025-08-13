@@ -40,6 +40,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Routerをインポート
+from routers import vision
+
+# APIルーターを登録
+app.include_router(vision.router)
+
+# ルートエンドポイント
+@app.get("/")
+async def root():
+    """APIルート情報"""
+    return {
+        "service": "Vision API",
+        "version": "1.0.0",
+        "description": "画像解析基盤API - 物体検出、セグメンテーション、深度推定",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
 # ヘルスチェック
 @app.get("/health")
 async def health_check():
@@ -50,15 +68,6 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# ルート
-@app.get("/")
-async def root():
-    """ルートエンドポイント"""
-    return {
-        "message": "Vision API - 画像解析基盤",
-        "docs": "/docs",
-        "health": "/health"
-    }
 
 # APIバージョン情報
 @app.get("/api/v1/info")
