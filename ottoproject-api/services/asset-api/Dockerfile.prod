@@ -1,0 +1,51 @@
+# 本番用Dockerfile - Asset API
+# マルチステージビルドで軽量化
+
+# ビルドステージ
+FROM oven/bun:1-alpine AS builder
+
+WORKDIR /app
+
+# パッケージファイルをコピー
+COPY package.json bun.lock ./
+
+# 本番用の依存関係のみインストール
+RUN bun install --frozen-lockfile --production
+
+# ソースコードをコピー
+COPY src ./src
+COPY tsconfig.json ./
+
+# TypeScriptをビルド
+RUN bun build src/index.ts --outdir dist --target node
+
+# 実行ステージ
+FROM oven/bun:1-alpine
+
+WORKDIR /app
+
+# ビルドステージから必要なファイルのみコピー
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+
+# 非rootユーザーで実行
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+USER nodejs
+
+# Cloud Runのデフォルトポート
+EXPOSE 8080
+
+# 環境変数
+ENV NODE_ENV=production
+ENV API_PORT=8080
+ENV API_HOST=0.0.0.0
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# アプリケーション起動
+CMD ["bun", "run", "dist/index.js"]

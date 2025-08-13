@@ -64,7 +64,7 @@ logs/
 *.cache
 
 # Deployment docs (contains sensitive info)
-DEPLOYMENT_GUIDE.md
+# DEPLOYMENT_GUIDE.md  # 秘匿情報を削除したため、コミット可能
 
 .claude/
 .tmp

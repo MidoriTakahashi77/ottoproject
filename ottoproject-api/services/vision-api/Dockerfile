@@ -12,12 +12,17 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     wget \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
+    libglx0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Pythonパッケージのインストール
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# YOLOv8モデルを事前ダウンロード（ビルド時にキャッシュ）
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8m.pt')"
 
 # アプリケーションコードをコピー
 COPY . .

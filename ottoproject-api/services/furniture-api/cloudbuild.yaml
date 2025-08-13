@@ -1,0 +1,82 @@
+# Cloud Build設定 - Furniture API
+# Google Cloud Buildで自動ビルド・デプロイ
+
+substitutions:
+  _SERVICE_NAME: furniture-api
+  _REGION: asia-northeast1
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+steps:
+  # Step 1: Dockerイメージのビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:${COMMIT_SHA}'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'Dockerfile.prod'
+      - '.'
+    dir: '.'
+
+  # Step 2: イメージをContainer Registryにプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}'
+    waitFor: ['build-image']
+
+  # Step 3: Cloud Runへデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:${COMMIT_SHA}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--timeout=60'
+      - '--concurrency=100'
+      - '--cpu=2'
+      - '--memory=1Gi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--set-env-vars=HOST=0.0.0.0'
+      - '--set-env-vars=PYTHONUNBUFFERED=1'
+      - '--set-secrets=SUPABASE_URL=supabase-url:latest'
+      - '--set-secrets=SUPABASE_ANON_KEY=supabase-anon-key:latest'
+      - '--set-secrets=DATABASE_URL=database-url:latest'
+      - '--set-secrets=REDIS_URL=redis-url:latest'
+    waitFor: ['push-image']
+
+  # Step 4: トラフィックを新しいリビジョンに切り替え
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'route-traffic'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'update-traffic'
+      - '${_SERVICE_NAME}'
+      - '--region=${_REGION}'
+      - '--to-latest'
+    waitFor: ['deploy']
+
+# ビルドされたイメージ
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:${COMMIT_SHA}'
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+# タイムアウト設定
+timeout: '1200s'

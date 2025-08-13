@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cookie Auth Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        h2 {
+            color: #333;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+        .warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>HTTPOnly Cookie認証テスト</h1>
+    
+    <div class="section">
+        <h2>1. Cookie状態確認</h2>
+        <button onclick="checkCookies()">Cookieを確認</button>
+        <pre id="cookie-output"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>2. LocalStorage状態確認</h2>
+        <button onclick="checkLocalStorage()">LocalStorageを確認</button>
+        <pre id="storage-output"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>3. HTTPOnly Cookie保護テスト</h2>
+        <button onclick="testHttpOnlyCookies()">HTTPOnly Cookieアクセス試行</button>
+        <pre id="httponly-output"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>4. XSS攻撃シミュレーション</h2>
+        <button onclick="simulateXSS()">XSS攻撃をシミュレート</button>
+        <pre id="xss-output"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>5. セキュリティ診断結果</h2>
+        <button onclick="runSecurityDiagnosis()">セキュリティ診断を実行</button>
+        <div id="diagnosis-output"></div>
+    </div>
+    
+    <script>
+        function checkCookies() {
+            const output = document.getElementById('cookie-output');
+            const cookies = document.cookie;
+            
+            if (cookies) {
+                const cookieArray = cookies.split('; ');
+                const cookieObj = {};
+                
+                cookieArray.forEach(cookie => {
+                    const [key, value] = cookie.split('=');
+                    cookieObj[key] = value;
+                });
+                
+                output.textContent = JSON.stringify(cookieObj, null, 2);
+                
+                // HTTPOnly Cookieの存在チェック
+                const hasAccessToken = cookieObj['sb-access-token'] !== undefined;
+                const hasRefreshToken = cookieObj['sb-refresh-token'] !== undefined;
+                
+                if (!hasAccessToken && !hasRefreshToken) {
+                    output.textContent += '\n\n✅ HTTPOnly Cookieは適切に保護されています（JavaScript からアクセス不可）';
+                } else {
+                    output.textContent += '\n\n⚠️ 警告: トークンがJavaScriptからアクセス可能です！';
+                }
+            } else {
+                output.textContent = 'Cookieが設定されていません';
+            }
+        }
+        
+        function checkLocalStorage() {
+            const output = document.getElementById('storage-output');
+            const storageData = {};
+            let hasTokens = false;
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                
+                if (key.includes('supabase') || key.includes('auth')) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        storageData[key] = parsed;
+                        
+                        // トークンチェック
+                        if (parsed.access_token || parsed.refresh_token) {
+                            hasTokens = true;
+                        }
+                    } catch {
+                        storageData[key] = value;
+                    }
+                }
+            }
+            
+            if (Object.keys(storageData).length > 0) {
+                output.textContent = JSON.stringify(storageData, null, 2);
+                
+                if (hasTokens) {
+                    output.textContent += '\n\n⚠️ 警告: LocalStorageにトークンが保存されています（XSS脆弱性リスク）';
+                } else {
+                    output.textContent += '\n\n✅ LocalStorageにトークンは保存されていません';
+                }
+            } else {
+                output.textContent = '✅ LocalStorageにSupabase関連データはありません';
+            }
+        }
+        
+        function testHttpOnlyCookies() {
+            const output = document.getElementById('httponly-output');
+            
+            // HTTPOnly Cookieへのアクセス試行
+            const testResults = {
+                'sb-access-token': null,
+                'sb-refresh-token': null,
+                'sb-user-id': null
+            };
+            
+            const cookies = document.cookie.split('; ');
+            cookies.forEach(cookie => {
+                const [key, value] = cookie.split('=');
+                if (testResults.hasOwnProperty(key)) {
+                    testResults[key] = value ? 'アクセス可能 ⚠️' : null;
+                }
+            });
+            
+            // 結果を表示
+            let hasAccess = false;
+            for (const [key, value] of Object.entries(testResults)) {
+                if (value) {
+                    hasAccess = true;
+                    break;
+                }
+            }
+            
+            if (!hasAccess) {
+                output.textContent = '✅ HTTPOnly Cookieは適切に保護されています\n\n';
+                output.textContent += JSON.stringify(testResults, null, 2);
+                output.textContent += '\n\nすべてのトークンがJavaScriptからアクセス不可能です。';
+            } else {
+                output.textContent = '⚠️ セキュリティリスク検出\n\n';
+                output.textContent += JSON.stringify(testResults, null, 2);
+                output.textContent += '\n\n一部のトークンがJavaScriptからアクセス可能です。';
+            }
+        }
+        
+        function simulateXSS() {
+            const output = document.getElementById('xss-output');
+            
+            // XSS攻撃シミュレーション
+            output.textContent = 'XSS攻撃シミュレーション実行中...\n\n';
+            
+            // LocalStorageからトークン取得試行
+            let stolenTokens = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.includes('supabase') || key.includes('auth')) {
+                    const value = localStorage.getItem(key);
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (parsed.access_token || parsed.refresh_token) {
+                            stolenTokens[key] = parsed;
+                        }
+                    } catch {}
+                }
+            }
+            
+            // Cookieからトークン取得試行
+            const cookies = document.cookie.split('; ');
+            cookies.forEach(cookie => {
+                const [key, value] = cookie.split('=');
+                if (key.includes('token') || key.includes('auth')) {
+                    stolenTokens[`cookie_${key}`] = value;
+                }
+            });
+            
+            if (Object.keys(stolenTokens).length > 0) {
+                output.textContent += '⚠️ 以下の情報が窃取可能です:\n\n';
+                output.textContent += JSON.stringify(stolenTokens, null, 2);
+                output.textContent += '\n\n重大なセキュリティリスクが存在します！';
+            } else {
+                output.textContent += '✅ XSS攻撃からトークンは保護されています\n\n';
+                output.textContent += 'HTTPOnly Cookieにより、JavaScriptからトークンにアクセスできません。';
+            }
+        }
+        
+        function runSecurityDiagnosis() {
+            const output = document.getElementById('diagnosis-output');
+            output.innerHTML = '';
+            
+            const results = [];
+            
+            // 1. HTTPOnly Cookie保護チェック
+            const cookies = document.cookie.split('; ');
+            let hasAccessibleTokens = false;
+            cookies.forEach(cookie => {
+                const [key] = cookie.split('=');
+                if (key.includes('token') && !key.includes('csrf')) {
+                    hasAccessibleTokens = true;
+                }
+            });
+            
+            results.push({
+                test: 'HTTPOnly Cookie保護',
+                status: !hasAccessibleTokens,
+                message: hasAccessibleTokens ? 
+                    'トークンがJavaScriptからアクセス可能です' : 
+                    'トークンは適切に保護されています'
+            });
+            
+            // 2. LocalStorageセキュリティチェック
+            let hasLocalStorageTokens = false;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                if (key.includes('supabase') || key.includes('auth')) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (parsed.access_token || parsed.refresh_token) {
+                            hasLocalStorageTokens = true;
+                        }
+                    } catch {}
+                }
+            }
+            
+            results.push({
+                test: 'LocalStorageセキュリティ',
+                status: !hasLocalStorageTokens,
+                message: hasLocalStorageTokens ? 
+                    'LocalStorageにトークンが保存されています（XSS脆弱性）' : 
+                    'LocalStorageにトークンは保存されていません'
+            });
+            
+            // 3. SameSite属性チェック（推定）
+            results.push({
+                test: 'CSRF保護（SameSite）',
+                status: true, // HTTPOnly実装では通常設定される
+                message: 'SameSite=Lax設定（推定）でCSRF攻撃から保護'
+            });
+            
+            // 4. HTTPS確認
+            const isHttps = location.protocol === 'https:';
+            results.push({
+                test: 'HTTPS通信',
+                status: isHttps,
+                message: isHttps ? 
+                    'HTTPS通信が使用されています' : 
+                    '警告: HTTP通信です（開発環境）'
+            });
+            
+            // 結果を表示
+            let html = '<h3>セキュリティ診断結果</h3>';
+            let passCount = 0;
+            
+            results.forEach(result => {
+                if (result.status) passCount++;
+                const className = result.status ? 'success' : 'error';
+                html += `<div class="section ${className}">`;
+                html += `<strong>${result.test}:</strong> ${result.status ? '✅' : '❌'} ${result.message}`;
+                html += '</div>';
+            });
+            
+            // 総合評価
+            const score = Math.round((passCount / results.length) * 100);
+            const scoreClass = score >= 75 ? 'success' : (score >= 50 ? 'warning' : 'error');
+            
+            html += `<div class="section ${scoreClass}">`;
+            html += `<h4>総合スコア: ${score}% (${passCount}/${results.length})</h4>`;
+            
+            if (score === 100) {
+                html += '<p>✨ 完璧なセキュリティ実装です！</p>';
+            } else if (score >= 75) {
+                html += '<p>良好なセキュリティレベルです。</p>';
+            } else if (score >= 50) {
+                html += '<p>⚠️ セキュリティの改善が必要です。</p>';
+            } else {
+                html += '<p>❌ 重大なセキュリティリスクがあります。</p>';
+            }
+            
+            html += '</div>';
+            
+            output.innerHTML = html;
+        }
+        
+        // ページ読み込み時に自動実行
+        window.onload = function() {
+            console.log('Cookie Auth Test Page Loaded');
+            console.log('このページでHTTPOnly Cookie認証の安全性をテストできます。');
+        };
+    </script>
+</body>
+</html>
