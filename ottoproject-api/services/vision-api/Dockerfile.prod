@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
+    libgl1 \
+    libglx0 \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,10 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
-# YOLOv8モデルの事前ダウンロード（ビルド時間短縮）
+# YOLOv8モデルの事前ダウンロード（メディアムモデルを使用）
 ENV HOME=/root
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" && \
-    ls -la /root/.cache/ || true
+RUN mkdir -p /tmp/yolo_models && \
+    cd /tmp/yolo_models && \
+    python -c "from ultralytics import YOLO; YOLO('yolov8m.pt')" && \
+    ls -la /root/.cache/ 2>/dev/null || true
 
 # 実行ステージ
 FROM python:3.11-slim
@@ -43,7 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender1 \
     libgomp1 \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx0 \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
@@ -52,8 +55,11 @@ RUN useradd -m -u 1001 appuser
 
 # ビルドステージからPythonパッケージをコピー（appuserのホームディレクトリへ）
 COPY --from=builder /root/.local /home/appuser/.local
-# YOLOモデルは存在する場合のみコピー（初回起動時にダウンロードも可能）
-RUN mkdir -p /home/appuser/.cache
+# YOLOモデルディレクトリを作成
+RUN mkdir -p /home/appuser/.cache/hub /tmp/yolo_models && \
+    chown -R appuser:appuser /tmp/yolo_models /home/appuser/.cache
+# YOLOモデルをコピー（ビルド時にダウンロード済み）
+COPY --from=builder --chown=appuser:appuser /tmp/yolo_models/*.pt /tmp/yolo_models/
 
 # アプリケーションコードをコピー
 COPY --chown=appuser:appuser . .
@@ -74,6 +80,7 @@ EXPOSE 8080
 ENV HOST=0.0.0.0
 ENV PYTHONUNBUFFERED=1
 ENV OMP_NUM_THREADS=4
+ENV YOLO_MODEL=yolov8m.pt
 
 # ヘルスチェック
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

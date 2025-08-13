@@ -80,15 +80,16 @@ if [ -n "$SERVICE_URL" ]; then
     echo -e "${GREEN}デプロイが完了しました！${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e "\nサービスURL: ${SERVICE_URL}"
-    echo -e "\nヘルスチェック: ${SERVICE_URL}/health"
+    echo -e "\nヘルスチェック: ${SERVICE_URL}/api/v1/vision/health"
     echo ""
     
     # ヘルスチェック実行
     echo -e "${YELLOW}ヘルスチェックを実行しています...${NC}"
-    echo -e "${YELLOW}初回起動のため、レスポンスに時間がかかる場合があります${NC}"
-    sleep 10
-    if curl -s --max-time 30 "${SERVICE_URL}/health" | grep -q "healthy"; then
+    echo -e "${YELLOW}初回起動のため、レスポンスに時間がかかる場合があります（YOLOモデル初期化）${NC}"
+    sleep 15
+    if curl -s --max-time 60 "${SERVICE_URL}/api/v1/vision/health" | grep -q "healthy"; then
         echo -e "${GREEN}✓ APIは正常に動作しています${NC}"
+        echo -e "${GREEN}✓ YOLOv8モデルがロードされました${NC}"
     else
         echo -e "${RED}✗ ヘルスチェックに失敗しました${NC}"
         echo -e "${YELLOW}コールドスタートの可能性があります。しばらく待ってから再試行してください${NC}"
