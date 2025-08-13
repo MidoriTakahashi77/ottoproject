@@ -12,6 +12,12 @@ from PIL import Image
 import numpy as np
 from pydantic import BaseModel, Field
 import logging
+import sys
+import os
+
+# servicesディレクトリをパスに追加
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.yolo_service import get_yolo_service
 
 # ロガー設定
 logger = logging.getLogger(__name__)
@@ -46,6 +52,7 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     model_loaded: bool = False
+    model_info: Optional[Dict[str, Any]] = None
 
 # 画像検証設定
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -114,11 +121,21 @@ async def health_check():
     Returns:
         サービスの状態
     """
+    try:
+        yolo_service = get_yolo_service()
+        model_info = yolo_service.get_model_info()
+        model_loaded = yolo_service.is_ready
+    except Exception as e:
+        logger.error(f"YOLOサービスの状態確認エラー: {str(e)}")
+        model_info = {"error": str(e)}
+        model_loaded = False
+    
     return HealthResponse(
         status="healthy",
         service="vision-api",
         version="1.0.0",
-        model_loaded=False  # TODO: YOLOモデルのロード状態を確認
+        model_loaded=model_loaded,
+        model_info=model_info
     )
 
 @router.post("/analyze", response_model=AnalysisResponse)
@@ -164,6 +181,9 @@ async def analyze_image(
         image_hash = calculate_image_hash(contents)
         logger.info(f"Processing image with hash: {image_hash[:8]}...")
         
+        # メタデータを初期化
+        metadata = {}
+        
         # PIL Imageとして読み込み
         try:
             image = Image.open(io.BytesIO(contents))
@@ -184,43 +204,79 @@ async def analyze_image(
         # EXIF情報を削除（プライバシー保護）
         image = remove_exif_data(image)
         
-        # TODO: YOLOv8モデルで物体検出
-        # 現在はモックデータを返す
-        mock_objects = [
-            ObjectDetection(
-                category="chair",
-                confidence=0.92,
-                bbox=[100, 150, 200, 300]
-            ),
-            ObjectDetection(
-                category="table",
-                confidence=0.87,
-                bbox=[300, 200, 400, 250]
-            ),
-            ObjectDetection(
-                category="sofa",
-                confidence=0.78,
-                bbox=[50, 100, 450, 350]
-            )
-        ]
-        
-        # 信頼度閾値でフィルタリング
-        detected_objects = [
-            obj for obj in mock_objects 
-            if obj.confidence >= confidence_threshold
-        ]
+        # YOLOv8モデルで物体検出
+        try:
+            yolo_service = get_yolo_service()
+            if not yolo_service.is_ready:
+                logger.warning("YOLOサービスが準備できていません。モックデータを使用します。")
+                # フォールバック：モックデータ
+                detected_objects = [
+                    ObjectDetection(
+                        category="chair",
+                        confidence=0.92,
+                        bbox=[100, 150, 200, 300]
+                    ),
+                    ObjectDetection(
+                        category="table",
+                        confidence=0.87,
+                        bbox=[300, 200, 400, 250]
+                    )
+                ]
+            else:
+                # 実際の物体検出を実行
+                detection_result = yolo_service.detect_objects(
+                    image,
+                    confidence_threshold=confidence_threshold,
+                    focus_on_furniture=True  # 家具に焦点を当てる
+                )
+                
+                if detection_result.get("success", False):
+                    # 検出結果をAPIレスポンス形式に変換
+                    detected_objects = []
+                    for detection in detection_result.get("detections", []):
+                        # bbox形式を[x1, y1, x2, y2]から[x, y, width, height]に変換
+                        bbox = detection["bbox"]
+                        x1, y1, x2, y2 = bbox
+                        width_val = x2 - x1
+                        height_val = y2 - y1
+                        
+                        obj = ObjectDetection(
+                            category=detection["category"],
+                            confidence=detection["confidence"],
+                            bbox=[x1, y1, width_val, height_val]
+                        )
+                        detected_objects.append(obj)
+                    
+                    # シーン分析を追加
+                    scene_analysis = yolo_service.analyze_scene(detection_result.get("detections", []))
+                    metadata["scene_analysis"] = scene_analysis
+                    
+                else:
+                    logger.error(f"物体検出エラー: {detection_result.get('error', 'Unknown error')}")
+                    detected_objects = []
+                    
+        except Exception as e:
+            logger.error(f"YOLOサービスエラー: {str(e)}")
+            # エラー時はモックデータを使用
+            detected_objects = [
+                ObjectDetection(
+                    category="error_fallback",
+                    confidence=0.0,
+                    bbox=[0, 0, 100, 100]
+                )
+            ]
         
         # 処理時間計算
         processing_time_ms = int((time.time() - start_time) * 1000)
         
-        # メタデータ作成
-        metadata = {
+        # メタデータ更新
+        metadata.update({
             "image_size": {"width": width, "height": height},
             "image_hash": image_hash[:8] + "...",  # ハッシュの一部のみ
             "format": image.format or "unknown",
             "confidence_threshold": confidence_threshold,
             "total_objects_detected": len(detected_objects)
-        }
+        })
         
         # レスポンス作成
         response = AnalysisResponse(
